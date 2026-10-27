@@ -10,7 +10,7 @@ import Lenis from 'lenis'
  *   data-reveal="rise|mask|out|clip|zoom"  plays once when it enters the viewport
  *   data-delay="ms"                         explicit transition delay
  *   data-progress                           exposes --p (0→1) through a tall section
- *   data-htrack (inside data-progress)      slides horizontally with --p
+ *   data-htrack (inside data-progress)      slides horizontally with --p (and with sideways swipes)
  *   data-window="start,end"                 inert unless --p is inside the window
  *   data-view                               exposes --v, 0→1 progress through the viewport
  *   data-vtrack                             slides horizontally while passing the viewport
@@ -263,6 +263,93 @@ export function startScrollFx(): () => void {
   }
   raf = requestAnimationFrame(tick)
 
+  // ---- sideways input on horizontal tracks ----
+  // A pinned [data-htrack] section moves with vertical scroll. A sideways swipe (trackpad,
+  // Shift + wheel, finger) over it is turned into the vertical scroll that moves the track
+  // the same distance, so the cards follow whichever way the user pushes them.
+  const trackAt = (clientY: number) => {
+    const h = window.innerHeight
+    for (const { el, track } of progress) {
+      if (!track) continue
+      const r = el.getBoundingClientRect()
+      // only while the section is pinned, so a sideways swipe never jumps the page into it
+      if (r.top > 1 || r.bottom < h - 1 || r.top > clientY || r.bottom < clientY) continue
+      const range = Math.max(1, r.height - h)
+      const dx = Math.max(1, track.scrollWidth - window.innerWidth)
+      return { start: window.scrollY + r.top, range, ratio: range / dx }
+    }
+    return null
+  }
+  // vertical scroll target for a sideways move of `dx` px; null when the track is already at that end
+  const sidewaysTarget = (t: { start: number; range: number; ratio: number }, from: number, dx: number) => {
+    const to = Math.min(t.start + t.range, Math.max(t.start, from + dx * t.ratio))
+    return Math.abs(to - from) < 0.5 ? null : to
+  }
+  // successive wheel events add up from where the last one aimed, not from where the glide is now
+  let wheelTo = 0
+  let wheelAt = -1e9
+  const current = (now: number) => (now - wheelAt < 250 ? wheelTo : window.scrollY)
+  const go = (y: number, immediate: boolean) => {
+    if (lenis) lenis.scrollTo(y, { immediate, force: true })
+    else window.scrollTo({ top: y, behavior: 'instant' })
+  }
+
+  const onWheel = (e: WheelEvent) => {
+    // Shift + wheel arrives as deltaX in most browsers, as deltaY in some
+    const dx = e.deltaX || (e.shiftKey ? e.deltaY : 0)
+    if (!dx || Math.abs(dx) <= Math.abs(e.shiftKey ? 0 : e.deltaY)) return
+    const t = trackAt(e.clientY)
+    if (!t) return
+    const to = sidewaysTarget(t, current(e.timeStamp), dx * (e.deltaMode === 1 ? 40 : 1))
+    if (to === null) return
+    e.preventDefault()
+    e.stopPropagation() // keep Lenis from also reading this wheel event
+    wheelTo = to
+    wheelAt = e.timeStamp
+    go(to, false)
+  }
+
+  let touch: { x: number; y: number; t: number; axis: '' | 'x' | 'y'; v: number; track: ReturnType<typeof trackAt> } | null = null
+  const onTouchStart = (e: TouchEvent) => {
+    if (e.touches.length !== 1) return (touch = null)
+    const p = e.touches[0]
+    touch = { x: p.clientX, y: p.clientY, t: e.timeStamp, axis: '', v: 0, track: trackAt(p.clientY) }
+  }
+  const onTouchMove = (e: TouchEvent) => {
+    if (!touch?.track || touch.axis === 'y') return
+    const p = e.touches[0]
+    const mx = p.clientX - touch.x
+    if (!touch.axis) {
+      const my = p.clientY - touch.y
+      if (Math.abs(mx) < 8 && Math.abs(my) < 8) return
+      touch.axis = Math.abs(mx) > Math.abs(my) ? 'x' : 'y'
+      if (touch.axis === 'y') return
+    }
+    e.preventDefault()
+    const to = sidewaysTarget(touch.track, window.scrollY, -mx)
+    const dt = Math.max(1, e.timeStamp - touch.t)
+    touch.v = 0.8 * (-mx / dt) + 0.2 * touch.v
+    touch.x = p.clientX
+    touch.t = e.timeStamp
+    if (to !== null) go(to, true)
+  }
+  const onTouchEnd = () => {
+    // let a quick flick glide on, like a native swipe
+    if (touch?.track && touch.axis === 'x' && Math.abs(touch.v) > 0.2) {
+      const to = sidewaysTarget(touch.track, window.scrollY, touch.v * 260)
+      if (to !== null) {
+        if (lenis) lenis.scrollTo(to, { force: true, duration: 0.9 })
+        else window.scrollTo({ top: to, behavior: 'smooth' })
+      }
+    }
+    touch = null
+  }
+  window.addEventListener('wheel', onWheel, { passive: false, capture: true })
+  window.addEventListener('touchstart', onTouchStart, { passive: true })
+  window.addEventListener('touchmove', onTouchMove, { passive: false })
+  window.addEventListener('touchend', onTouchEnd)
+  window.addEventListener('touchcancel', onTouchEnd)
+
   const markDirty = () => (dirty = true)
   requestUpdate = markDirty
   const mo = new MutationObserver(() => (needScan = true))
@@ -276,6 +363,11 @@ export function startScrollFx(): () => void {
     mo.disconnect()
     ro.disconnect()
     window.removeEventListener('resize', markDirty)
+    window.removeEventListener('wheel', onWheel, { capture: true })
+    window.removeEventListener('touchstart', onTouchStart)
+    window.removeEventListener('touchmove', onTouchMove)
+    window.removeEventListener('touchend', onTouchEnd)
+    window.removeEventListener('touchcancel', onTouchEnd)
     lenis?.destroy()
     lenis = null
   }

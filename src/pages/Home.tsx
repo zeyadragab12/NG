@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Footer } from '../components/Footer'
 import { Arrow, Count, Frame, Img, Marquee, Panels, StatusDot, Words } from '../components/ui'
@@ -571,9 +571,25 @@ const OFFICES = [
 
 function Artlife() {
   const ref = useRef<HTMLElement>(null)
+  const pin = useRef<HTMLDivElement>(null)
   const near = useNear(ref)
+  const [pinH, setPinH] = useState<string>('260svh')
+  useEffect(() => {
+    const box = pin.current
+    const track = box?.querySelector<HTMLElement>('[data-htrack]')
+    if (!box || !track) return
+    const measure = () => setPinH(`${Math.round(window.innerHeight + Math.max(0, track.scrollWidth - window.innerWidth))}px`)
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(track)
+    window.addEventListener('resize', measure)
+    return () => {
+      ro.disconnect()
+      window.removeEventListener('resize', measure)
+    }
+  }, [])
   return (
-    <section ref={ref} id="artlife" data-place="artlife" data-tone="ink" className="tone overflow-hidden py-section">
+    <section ref={ref} id="artlife" data-place="artlife" data-tone="ink" className="tone overflow-x-clip py-section">
       <div className="flex flex-wrap items-end justify-between gap-8 px-gutter">
         <h2 data-reveal="rise" className="text-[clamp(88px,14vw,240px)] leading-[.82] font-extrabold tracking-[-.03em]">
           ART
@@ -593,8 +609,17 @@ function Artlife() {
         </div>
       </div>
 
-      <div className="mt-[clamp(24px,4vh,48px)]">
-        <ul data-vtrack className="flex w-max gap-5 pl-[clamp(20px,6vw,120px)] will-change-transform">
+      {/* Pinned while the cards slide, and the section is as tall as the slide is long,
+          so the cards move about 1 px sideways for every 1 px of scroll. */}
+      <div ref={pin} data-progress className="relative mt-[clamp(24px,4vh,48px)]" style={{ height: pinH }}>
+        <div className="sticky top-0 flex h-svh flex-col justify-center overflow-hidden">
+        <div className="mb-[clamp(20px,3vh,36px)] flex items-center gap-4 px-[clamp(20px,6vw,120px)]">
+          <span className="eyebrow">Inside Artlife</span>
+          <span className="tone-line relative h-px flex-1 border-t opacity-60">
+            <span className="absolute inset-y-[-1px] left-0 w-full origin-left bg-accent" style={{ transform: `scaleX(${P})` }} />
+          </span>
+        </div>
+        <ul data-htrack className="flex w-max gap-5 px-[clamp(20px,6vw,120px)] will-change-transform">
           {ARTLIFE.map((a) => (
             <li key={a.title} className="group w-[min(520px,74vw)]">
               <div className="relative h-[clamp(220px,32svh,300px)] overflow-hidden rounded-[18px]">
@@ -605,6 +630,7 @@ function Artlife() {
             </li>
           ))}
         </ul>
+        </div>
       </div>
 
       <div className="grid gap-[clamp(32px,2vw,28px)] px-gutter pt-[clamp(56px,9vh,110px)] md:grid-cols-2">
