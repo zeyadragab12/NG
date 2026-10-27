@@ -70,38 +70,35 @@ const DEST = [
 ]
 
 function Location() {
-  const section = useRef<HTMLElement>(null)
+  const map = useRef<HTMLDivElement>(null)
   const routes = useRef<(SVGPathElement | null)[]>([])
   const ends = useRef<(SVGGElement | null)[]>([])
   const rows = useRef<(HTMLLIElement | null)[]>([])
   const n = DEST.length
 
-  // each road draws in turn as you scroll; its row in the list lights up with it
-  useScrollT(
-    section,
-    (t) => {
-      const u = t * (n + 0.4)
-      const current = Math.min(n - 1, Math.floor(u))
-      DEST.forEach((_, k) => {
-        const p = easeInOut(clamp01(u - k))
-        routes.current[k]?.style.setProperty('stroke-dashoffset', (1 - p).toFixed(4))
-        const g = ends.current[k]
-        if (g) {
-          const o = clamp01((p - 0.8) * 5)
-          g.style.opacity = o.toFixed(3)
-          g.style.transform = `scale(${(0.6 + o * 0.4).toFixed(3)})`
-        }
-        const row = rows.current[k]
-        const state = k === current && u > 0 ? 'now' : p > 0 ? 'done' : 'next'
-        if (row && row.dataset.state !== state) row.dataset.state = state
-      })
-    },
-    0.55,
-    1.1,
-  )
+  // each road draws in turn as you scroll; its row in the list lights up with it.
+  // Timed to the map: starts as it enters, all roads are done when it reaches the middle of the screen.
+  useScrollT(map, (_, r, vh) => {
+    const t = clamp01((vh * 0.95 - r.top) / (vh * 0.45 + r.height * 0.5))
+    const u = t * (n + 0.4)
+    const current = u >= n ? -1 : Math.floor(u)
+    DEST.forEach((_, k) => {
+      const p = easeInOut(clamp01(u - k))
+      routes.current[k]?.style.setProperty('stroke-dashoffset', (1 - p).toFixed(4))
+      const g = ends.current[k]
+      if (g) {
+        const o = clamp01((p - 0.8) * 5)
+        g.style.opacity = o.toFixed(3)
+        g.style.transform = `scale(${(0.6 + o * 0.4).toFixed(3)})`
+      }
+      const row = rows.current[k]
+      const state = k === current && u > 0 ? 'now' : p > 0 ? 'done' : 'next'
+      if (row && row.dataset.state !== state) row.dataset.state = state
+    })
+  })
 
   return (
-    <section ref={section} data-place="all" data-tone="ink" className="tone px-gutter py-section">
+    <section data-place="all" data-tone="ink" className="tone px-gutter py-section">
       <div className="grid items-center gap-[clamp(40px,6vw,110px)] lg:grid-cols-2">
         <div>
           <h2 className="type-h2">
@@ -128,7 +125,7 @@ function Location() {
           </ul>
         </div>
 
-        <div className="relative max-lg:order-first">
+        <div ref={map} className="relative max-lg:order-first">
           <div className="relative aspect-square overflow-hidden rounded-[24px] bg-[#151515] ring-1 ring-paper/10">
             <Panels />
             <svg viewBox="0 0 600 600" className="absolute inset-0 h-full w-full" role="img" aria-label="Schematic map: roads from NewGiza to nearby places">
