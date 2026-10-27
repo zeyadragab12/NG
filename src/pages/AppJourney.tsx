@@ -178,17 +178,32 @@ function Feature({ n, title, body, children }: { n: string; title: string; body:
   )
 }
 
+/**
+ * Official store badges (Apple: developer.apple.com, Google: play.google.com/badges), used unmodified.
+ * Paste the app's store URLs here; until then the badges show without a link.
+ */
+const STORE_LINKS = { appStore: '', googlePlay: '' }
+
+const BADGES = [
+  // Google's PNG has transparent padding built in, so it is drawn taller to match Apple's badge height
+  { name: 'Download on the App Store', src: '/badges/app-store.svg', href: STORE_LINKS.appStore, cls: 'h-11 w-auto' },
+  { name: 'Get it on Google Play', src: '/badges/google-play.png', href: STORE_LINKS.googlePlay, cls: '-my-[11px] -mx-[4px] h-[66px] w-auto' },
+]
+
 const STORES = (
-  <div className="mt-7 flex flex-wrap gap-3">
-    {[
-      ['Download on the', 'App Store'],
-      ['Get it on', 'Google Play'],
-    ].map(([pre, store]) => (
-      <span key={store} aria-label={`${store}: link coming soon`} className="flex min-w-[150px] flex-col rounded-xl bg-ink px-5 py-2.5 text-paper">
-        <span className="text-[10px] tracking-[.1em] uppercase opacity-70">{pre}</span>
-        <span className="text-[17px] font-bold">{store}</span>
-      </span>
-    ))}
+  <div className="mt-7 flex flex-wrap items-center gap-3">
+    {BADGES.map((b) => {
+      const img = <img src={b.src} alt={b.name} className={b.cls} draggable={false} />
+      return b.href ? (
+        <a key={b.name} href={b.href} target="_blank" rel="noopener noreferrer" className="rounded-[9px] transition-transform duration-300 hover:-translate-y-0.5">
+          {img}
+        </a>
+      ) : (
+        <span key={b.name} title="Coming soon" className="inline-flex">
+          {img}
+        </span>
+      )
+    })}
   </div>
 )
 
